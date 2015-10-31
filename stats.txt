@@ -1,0 +1,9 @@
+inode count: 960 992
+block count: 3 843 964
+block size : 4096 (B)
+block/group: 32 768
+
+block group inode table: 942
+inode/group: 8 144
+
+i_links_count = 0, file deleted, blocks freed
