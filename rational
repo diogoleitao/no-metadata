@@ -1,0 +1,25 @@
+SUPERBLOCK
+get block size
+	+ 24 -> 4
+get blocks per group
+	+ 32 -> 4
+get inodes per group
+	+ 40 -> 4
+
+if block size > 1 KB
+	bgd = block size
+else
+	bgd = 2 * block size
+
+BLOCK GROUP DESCRIPTOR
+get inode bitmap
+	+ 4 -> 4
+get bg inode table
+	+ 8 -> 4
+
+get root inode entry
+	bg inode table * block size + inode size * 2
+
+ROOT INODE
+get first data block
+	+ 40 (15 * 4)

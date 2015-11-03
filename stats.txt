@@ -6,4 +6,5 @@ block/group: 32 768
 block group inode table: 942
 inode/group: 8 144
 
-i_links_count = 0, file deleted, blocks freed
+INODE BITMAP ENTRY 0 --> "FREE INODE SPACE"
+
