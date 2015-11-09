@@ -15,6 +15,12 @@ def getDevSize():
     gbytes = raw_image.tell() / (1024 ** 3)
     print gbytes
 
+
+def randomValues():
+    with open("/dev/urandom", "r") as rand_generator:
+        return binascii.b2a_hex(rand_generator.read(1))
+
+
 if __name__ == "__main__":
 
     # CONSTANTS
@@ -91,7 +97,26 @@ if __name__ == "__main__":
         inode_values["inode_first_data_block"] = hexConverter(binascii.b2a_hex(raw_image.read(4)))
 
         raw_image.seek(inode_values["inode_first_data_block"] * sb_values["block_size"])
+
         while True:
-            print binascii.b2a_qp(raw_image.read(4)),
-            # print raw_image.tell(),
-            raw_input()
+            inode_no = hexConverter(binascii.b2a_hex(raw_image.read(4)))
+            record_length = hexConverter(binascii.b2a_hex(raw_image.read(2)))
+            name_length = hexConverter(binascii.b2a_hex(raw_image.read(1)))
+            file_type = hexConverter(binascii.b2a_hex(raw_image.read(1)))
+            inode_name = binascii.b2a_qp(raw_image.read(name_length))
+            padding = record_length - name_length - 8
+
+            print inode_name,
+            if padding > 3:  # FOUND DELETED FILES OR DIRECTORIES
+                print padding,
+                div = name_length / 4
+                rest = name_length % 4
+
+                if rest > 0:
+                    true_padding = div * 4 + 1 - name_length
+                    print true_padding
+                    raw_image.read(true_padding)
+            else:
+                raw_image.read(padding)
+
+            raw_input()  # WAIT FOR CR LF
