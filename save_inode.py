@@ -5,8 +5,10 @@ def save_inode(disk_file, output_file):
     inode = disk_file.read(128)
 
     position_length = len(str(position))
-    for (int i = 0; i < 16 - position_length; i++):
+    i = 0;
+    while (i < 16 - position_length):
         output_file.write('0')
+        i = i + 1
 
     output_file.write(position)
     output_file.write(inode)
@@ -15,9 +17,11 @@ def save_inode(disk_file, output_file):
 #   and the second relative to the file with the retrieve information (also opened in binary mode).
 def read_inodes(disk_file, input_file):
 
-    while(len(position_string = input_file.read(16)) > 0):
+    position_string = input_file.read(16)
+    while(len(position_string) > 0):
         position = int(position_string)
         inode = input_file.read(128)
 
         disk_file.seek(position)
         disk_file.write(inode)
+        position_string = input_file.read()
