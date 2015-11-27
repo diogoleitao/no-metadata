@@ -1,4 +1,5 @@
 import binascii
+from subprocess import call
 
 
 def hexConverter(byte):
@@ -19,6 +20,10 @@ def getDevSize():
 def randomValues():
     with open("/dev/urandom", "r") as rand_generator:
         return binascii.b2a_hex(rand_generator.read(1))
+
+
+def removeFiles(directory):
+    call(["rm", directory + "/*"])
 
 
 if __name__ == "__main__":
@@ -67,56 +72,50 @@ if __name__ == "__main__":
     }
 
     # VARIABLES
-    dir_full_path = "/dev/sdb1"
+    device = "/dev/sdb1"
     block_group_descriptor_table = 0
     first_inode_table = 0 * sb_values["block_size"]
     # second_inode_table = 33710 * info_values["block_size"]
 
-    with open(dir_full_path, "r") as raw_image:
-        for field, offset in sb_offsets.iteritems():
-            raw_image.seek(SUPERBLOCK + offset)
-            sb_values[field] = hexConverter(binascii.b2a_hex(raw_image.read(4)))
-
-        sb_values["block_size"] = 1024 << sb_values["block_size"]
-
-        if sb_values["block_size"] > 1024:
-            block_group_descriptor_table = sb_values["block_size"]
+    while True:
+        directory = raw_input("Please enter the absolute path for the directory that contains the files to be hidden. To terminate the program, type \"exit\".\n").strip()
+        if directory.lower() == "exit":
+            return
         else:
-            block_group_descriptor_table = sb_values["block_size"] * 2
+            with open(device, "r") as raw_image:
+                for field, offset in sb_offsets.iteritems():
+                    raw_image.seek(SUPERBLOCK + offset)
+                    sb_values[field] = hexConverter(binascii.b2a_hex(raw_image.read(4)))
 
-        for field, offset in bgdt_offsets.iteritems():
-            raw_image.seek(block_group_descriptor_table + offset)
-            bgdt_values[field] = hexConverter(binascii.b2a_hex(raw_image.read(4)))
+                sb_values["block_size"] = 1024 << sb_values["block_size"]
 
-        root_inode = bgdt_values["bg_inode_table"] * sb_values["block_size"] + INODE_SIZE * ROOT_INODE_NO
+                if sb_values["block_size"] > 1024:
+                    block_group_descriptor_table = sb_values["block_size"]
+                else:
+                    block_group_descriptor_table = sb_values["block_size"] * 2
 
-        raw_image.seek(root_inode + inode_offsets["inode_mode"])
-        inode_values["inode_mode"] = binascii.b2a_hex(raw_image.read(2))
+                for field, offset in bgdt_offsets.iteritems():
+                    raw_image.seek(block_group_descriptor_table + offset)
+                    bgdt_values[field] = hexConverter(binascii.b2a_hex(raw_image.read(4)))
 
-        raw_image.seek(root_inode + inode_offsets["inode_first_data_block"])
-        inode_values["inode_first_data_block"] = hexConverter(binascii.b2a_hex(raw_image.read(4)))
+                root_inode = bgdt_values["bg_inode_table"] * sb_values["block_size"] + INODE_SIZE * ROOT_INODE_NO
 
-        raw_image.seek(inode_values["inode_first_data_block"] * sb_values["block_size"])
+                raw_image.seek(root_inode + inode_offsets["inode_mode"])
+                inode_values["inode_mode"] = binascii.b2a_hex(raw_image.read(2))
 
-        while True:
-            inode_no = hexConverter(binascii.b2a_hex(raw_image.read(4)))
-            record_length = hexConverter(binascii.b2a_hex(raw_image.read(2)))
-            name_length = hexConverter(binascii.b2a_hex(raw_image.read(1)))
-            file_type = hexConverter(binascii.b2a_hex(raw_image.read(1)))
-            inode_name = binascii.b2a_qp(raw_image.read(name_length))
-            padding = record_length - name_length - 8
+                raw_image.seek(root_inode + inode_offsets["inode_first_data_block"])
+                inode_values["inode_first_data_block"] = hexConverter(binascii.b2a_hex(raw_image.read(4)))
 
-            print inode_name,
-            if padding > 3:  # FOUND DELETED FILES OR DIRECTORIES
-                print padding,
-                div = name_length / 4
-                rest = name_length % 4
+                raw_image.seek(inode_values["inode_first_data_block"] * sb_values["block_size"])
 
-                if rest > 0:
-                    true_padding = div * 4 + 1 - name_length
-                    print true_padding
-                    raw_image.read(true_padding)
-            else:
-                raw_image.read(padding)
+                while True:
+                    inode_no = hexConverter(binascii.b2a_hex(raw_image.read(4)))
+                    record_length = hexConverter(binascii.b2a_hex(raw_image.read(2)))
+                    name_length = hexConverter(binascii.b2a_hex(raw_image.read(1)))
+                    file_type = hexConverter(binascii.b2a_hex(raw_image.read(1)))
+                    inode_name = binascii.b2a_qp(raw_image.read(name_length))
+                    padding = record_length - name_length - 8
 
-            raw_input()  # WAIT FOR CR LF
+                    print inode_name,
+                    raw_input()  # WAIT FOR CR LF
+                removeFiles(directory)
