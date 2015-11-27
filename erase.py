@@ -1,7 +1,7 @@
 import binascii
-from subprocess import call
 
 
+# Little endian to human-readable number converter
 def hexConverter(byte):
     reversed_hex_str = "0x"
     i = 0
@@ -12,18 +12,40 @@ def hexConverter(byte):
     return int(reversed_hex_str, 0)
 
 
+# Auxiliary function to get the device's size (in GiB)
+# Not used
 def getDevSize():
     gbytes = raw_image.tell() / (1024 ** 3)
-    print gbytes
+    return gbytes
 
 
-def randomValues():
-    with open("/dev/urandom", "r") as rand_generator:
-        return binascii.b2a_hex(rand_generator.read(1))
+# Receives two file objects, the first one is the inode we want to save (opened in binary mode),
+# and the second one is to the file we want to save it to (opened in binary, append mode).
+def save_inode(disk_file, output_file):
+    position = disk_file.tell()
+    inode = disk_file.read(128)
+
+    position_length = len(str(position))
+    i = 0
+    while i < 16 - position_length:
+        output_file.write('0')
+        i += 1
+
+    output_file.write(position)
+    output_file.write(inode)
 
 
-def removeFiles(directory):
-    call(["rm", directory + "/*"])
+# Receives two file objects, the first relative to the disk we want to recover from (opened in binary mode),
+# and the second relative to the file with the retrieve information (also opened in binary mode).
+def read_inodes(disk_file, input_file):
+    position_string = input_file.read(16)
+    while len(position_string) > 0:
+        position = int(position_string)
+        inode = input_file.read(128)
+
+        disk_file.seek(position)
+        disk_file.write(inode)
+        position_string = input_file.read()
 
 
 if __name__ == "__main__":
@@ -33,6 +55,7 @@ if __name__ == "__main__":
     ROOT_INODE_NO = 2
     INODE_SIZE = 128
     DIR_MASK = 16384  # Mask for bit-by-bit check if inode is directory (0x4000)
+    BACKUP_FILE = "/some/file/at/some/directory/well/hidden"
 
     # STRUCTS
     sb_offsets = {
@@ -74,13 +97,13 @@ if __name__ == "__main__":
     # VARIABLES
     device = "/dev/sdb1"
     block_group_descriptor_table = 0
-    first_inode_table = 0 * sb_values["block_size"]
-    # second_inode_table = 33710 * info_values["block_size"]
+    first_inode_table = 0 * sb_values["block_size"]  # Pointless operation, just to remember us that we need to do the multiplication later
+    # second_inode_table = 33710 * info_values["block_size"]  # Not needed (?)
 
     while True:
         directory = raw_input("Please enter the absolute path for the directory that contains the files to be hidden. To terminate the program, type \"exit\".\n").strip()
         if directory.lower() == "exit":
-            return
+            quit()
         else:
             with open(device, "r") as raw_image:
                 for field, offset in sb_offsets.iteritems():
@@ -118,4 +141,4 @@ if __name__ == "__main__":
 
                     print inode_name,
                     raw_input()  # WAIT FOR CR LF
-                removeFiles(directory)
+                save_inode(raw_image, BACKUP_FILE)
