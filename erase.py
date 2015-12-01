@@ -105,6 +105,8 @@ if __name__ == "__main__":
         if directory.lower() == "exit":
             quit()
         else:
+            full_path = directory.split("/")
+            full_path.remove("")
             with open(device, "r") as raw_image:
                 for field, offset in sb_offsets.iteritems():
                     raw_image.seek(SUPERBLOCK + offset)
@@ -131,14 +133,20 @@ if __name__ == "__main__":
 
                 raw_image.seek(inode_values["inode_first_data_block"] * sb_values["block_size"])
 
-                while True:
+                # while True:
+                cur_dir = 0
+                while cur_dir < len(full_path):
                     inode_no = hexConverter(binascii.b2a_hex(raw_image.read(4)))
                     record_length = hexConverter(binascii.b2a_hex(raw_image.read(2)))
                     name_length = hexConverter(binascii.b2a_hex(raw_image.read(1)))
                     file_type = hexConverter(binascii.b2a_hex(raw_image.read(1)))
                     inode_name = binascii.b2a_qp(raw_image.read(name_length))
-                    padding = record_length - name_length - 8
 
-                    print inode_name,
-                    raw_input()  # WAIT FOR CR LF
-                save_inode(raw_image, BACKUP_FILE)
+                    if inode_name == full_path[cur_dir]:
+                        cur_dir += 1
+                        raw_image.seek()
+                    else:
+                        continue
+
+                print inode_name,
+                raw_input()  # WAIT FOR CR LF
