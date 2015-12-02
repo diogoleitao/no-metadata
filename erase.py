@@ -97,7 +97,7 @@ if __name__ == "__main__":
     # VARIABLES
     device = "/dev/sdb1"
     block_group_descriptor_table = 0
-    first_inode_table = 0 * sb_values["block_size"]  # Pointless operation, just to remember us that we need to do the multiplication later
+    # first_inode_table = 0 * sb_values["block_size"]  # Pointless operation, just to remember us that we need to do the multiplication later
     # second_inode_table = 33710 * info_values["block_size"]  # Not needed (?)
 
     while True:
@@ -144,7 +144,14 @@ if __name__ == "__main__":
 
                     if inode_name == full_path[cur_dir]:
                         cur_dir += 1
-                        raw_image.seek()
+
+                        table_no = inode_no / sb_values["inodes_per_group"]
+                        inode_table = table_no * sb_values["blocks_per_group"] * sb_values["block_size"]
+
+                        inode = bgdt_values["bg_inode_table"] * sb_values["block_size"] + INODE_SIZE * inode_no + inode_table
+                        raw_image.seek(inode + inode_offsets["inode_first_data_block"])
+                        first_data_block = hexConverter(binascii.b2a_hex(raw_image.read(4)))
+                        raw_image.seek(first_data_block * sb_values["block_size"])
                     else:
                         continue
 
