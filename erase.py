@@ -12,40 +12,44 @@ def hexConverter(byte):
     return int(reversed_hex_str, 0)
 
 
-# Auxiliary function to get the device's size (in GiB)
-# Not used
-def getDevSize():
-    gbytes = raw_image.tell() / (1024 ** 3)
-    return gbytes
-
-
 # Receives two file objects, the first one is the inode we want to save (opened in binary mode),
 # and the second one is to the file we want to save it to (opened in binary, append mode).
-def save_inode(disk_file, output_file):
-    position = disk_file.tell()
-    inode = disk_file.read(128)
+def hide_inodes(disk_file_path, output_file_path, index):
+    with open(disk_file_path, "r+b") as disk_file:
+        disk_file.seek(index)
+        position = disk_file.tell()
+        inode = disk_file.read(128)
 
-    position_length = len(str(position))
-    i = 0
-    while i < 16 - position_length:
-        output_file.write('0')
-        i += 1
+        with open(output_file_path, "wba") as output_file:
+            position_length = len(str(position))
+            i = 0
+            while i < 16 - position_length:
+                output_file.write('0')
+                i += 1
 
-    output_file.write(position)
-    output_file.write(inode)
+            output_file.write(str(position))
+            output_file.write(inode)
+
+        disk_file.seek(index)
+        i = 0
+        while i < 128:
+            disk_file.write('0')
+            i += 1
 
 
 # Receives two file objects, the first relative to the disk we want to recover from (opened in binary mode),
 # and the second relative to the file with the retrieve information (also opened in binary mode).
-def read_inodes(disk_file, input_file):
-    position_string = input_file.read(16)
-    while len(position_string) > 0:
-        position = int(position_string)
-        inode = input_file.read(128)
+def recover_inodes(disk_file_path, input_file_path):
+    with open(disk_file_path, "r+b") as disk_file:
+        with open(input_file_path, "rb") as input_file:
+            position_string = input_file.read(16)
+            while len(position_string) > 0:
+                position = int(position_string)
+                inode = input_file.read(128)
 
-        disk_file.seek(position)
-        disk_file.write(inode)
-        position_string = input_file.read()
+                disk_file.seek(position)
+                disk_file.write(inode)
+                position_string = input_file.read()
 
 
 if __name__ == "__main__":
@@ -54,16 +58,12 @@ if __name__ == "__main__":
     SUPERBLOCK = 1024
     ROOT_INODE_NO = 2
     INODE_SIZE = 128
-    DIR_MASK = 16384  # Mask for bit-by-bit check if inode is directory (0x4000)
-    BACKUP_FILE = "/some/file/at/some/directory/well/hidden"
 
     # STRUCTS
     sb_offsets = {
         "block_size": 24,
         "blocks_per_group": 32,
         "inodes_per_group": 40
-        # "inode_count": 4,
-        # "block_count": 4,
     }
 
     bgdt_offsets = {
@@ -80,8 +80,6 @@ if __name__ == "__main__":
         "block_size": 0,
         "blocks_per_group": 0,
         "inodes_per_group": 0
-        # "inode_count": 0,
-        # "block_count": 0,
     }
 
     bgdt_values = {
@@ -96,68 +94,51 @@ if __name__ == "__main__":
 
     # VARIABLES
     block_group_descriptor_table = 0
-    # first_inode_table = 0 * sb_values["block_size"]  # Pointless operation, just to remember us that we need to do the multiplication later
-    # second_inode_table = 33710 * info_values["block_size"]  # Not needed (?)
 
-    device = "/dev/" + raw_input("Please enter the device name from the /dev directory (e.g., sda1):\n")
-    while True:
-        directory = raw_input("Please enter the absolute path for the directory that contains the files to be hidden. To terminate the program, type \"exit\".\n").strip()
-        if directory.lower() == "exit":
-            quit()
-        else:
-            full_path = directory.split("/")
-            full_path.remove("")
-            with open(device, "r") as raw_image:
-                for field, offset in sb_offsets.iteritems():
-                    raw_image.seek(SUPERBLOCK + offset)
-                    sb_values[field] = hexConverter(binascii.b2a_hex(raw_image.read(4)))
+    device = "/dev/" + raw_input("> Please enter the device name from the /dev directory (e.g., sda1):\n")
+    operation = raw_input("> Please choose if you want to [r]ecover or [h]ide:\n")
+    backup_file = raw_input("> Please enter the absolute path for the backup file:\n")
 
-                sb_values["block_size"] = 1024 << sb_values["block_size"]
+    if operation == "r":
+        recover_inodes(device, backup_file)
+    elif operation == "h":
+        while True:
+            directory = raw_input("> Please enter the absolute path for the directory that contains the files to be hidden. To terminate the program, type \"exit\".\n").strip()
+            if directory.lower() == "exit":
+                quit()
+            else:
+                full_path = directory.split("/")
+                if "" in full_path:
+                    full_path.remove("")
+                with open(device, "r") as raw_image:
+                    for field, offset in sb_offsets.iteritems():
+                        raw_image.seek(SUPERBLOCK + offset)
+                        sb_values[field] = hexConverter(binascii.b2a_hex(raw_image.read(4)))
 
-                if sb_values["block_size"] > 1024:
-                    block_group_descriptor_table = sb_values["block_size"]
-                else:
-                    block_group_descriptor_table = sb_values["block_size"] * 2
+                    sb_values["block_size"] = 1024 << sb_values["block_size"]
 
-                for field, offset in bgdt_offsets.iteritems():
-                    raw_image.seek(block_group_descriptor_table + offset)
-                    bgdt_values[field] = hexConverter(binascii.b2a_hex(raw_image.read(4)))
+                    if sb_values["block_size"] > 1024:
+                        block_group_descriptor_table = sb_values["block_size"]
+                    else:
+                        block_group_descriptor_table = sb_values["block_size"] * 2
 
-                root_inode = bgdt_values["bg_inode_table"] * sb_values["block_size"] + INODE_SIZE * ROOT_INODE_NO
+                    for field, offset in bgdt_offsets.iteritems():
+                        raw_image.seek(block_group_descriptor_table + offset)
+                        bgdt_values[field] = hexConverter(binascii.b2a_hex(raw_image.read(4)))
 
-                raw_image.seek(root_inode + inode_offsets["inode_mode"])
-                inode_values["inode_mode"] = binascii.b2a_hex(raw_image.read(2))
+                    root_inode = bgdt_values["bg_inode_table"] * sb_values["block_size"] + INODE_SIZE * ROOT_INODE_NO
 
-                raw_image.seek(root_inode + inode_offsets["inode_first_data_block"])
-                inode_values["inode_first_data_block"] = hexConverter(binascii.b2a_hex(raw_image.read(4)))
+                    raw_image.seek(root_inode + inode_offsets["inode_mode"])
+                    inode_values["inode_mode"] = binascii.b2a_hex(raw_image.read(2))
 
-                raw_image.seek(inode_values["inode_first_data_block"] * sb_values["block_size"])
+                    raw_image.seek(root_inode + inode_offsets["inode_first_data_block"])
+                    inode_values["inode_first_data_block"] = hexConverter(binascii.b2a_hex(raw_image.read(4)))
 
-                cur_dir = 0
-                while cur_dir < len(full_path):
-                    inode_no = hexConverter(binascii.b2a_hex(raw_image.read(4)))
-                    record_length = hexConverter(binascii.b2a_hex(raw_image.read(2)))
-                    name_length = hexConverter(binascii.b2a_hex(raw_image.read(1)))
-                    file_type = hexConverter(binascii.b2a_hex(raw_image.read(1)))
-                    inode_name = binascii.b2a_qp(raw_image.read(name_length))
-                    padding = raw_image.read(record_length - name_length - 8)
+                    raw_image.seek(inode_values["inode_first_data_block"] * sb_values["block_size"])
 
-                    if inode_name == full_path[cur_dir]:
-                        cur_dir += 1
-
-                        table_no = (inode_no - 1) / sb_values["inodes_per_group"]
-                        inode_table = table_no * sb_values["blocks_per_group"] * sb_values["block_size"]
-                        real_inode_no = (inode_no - 1) % sb_values["inodes_per_group"]
-
-                        inode = bgdt_values["bg_inode_table"] * sb_values["block_size"] + INODE_SIZE * real_inode_no + inode_table
-                        raw_image.seek(inode + inode_offsets["inode_first_data_block"])
-
-                        # Skip inode_mode field
-                        # raw_image.read(2)
-
-                        first_data_block = hexConverter(binascii.b2a_hex(raw_image.read(4)))
-                        raw_image.seek(first_data_block * sb_values["block_size"])
-
+                    cur_dir = 0
+                    # Find the directory iteratively
+                    while cur_dir < len(full_path):
                         inode_no = hexConverter(binascii.b2a_hex(raw_image.read(4)))
                         record_length = hexConverter(binascii.b2a_hex(raw_image.read(2)))
                         name_length = hexConverter(binascii.b2a_hex(raw_image.read(1)))
@@ -165,10 +146,23 @@ if __name__ == "__main__":
                         inode_name = binascii.b2a_qp(raw_image.read(name_length))
                         padding = raw_image.read(record_length - name_length - 8)
 
-                        if True:
-                            print inode_no
-                            print record_length
-                            print name_length
-                            print file_type
-                            print inode_name
-                            print padding
+                        if inode_name == full_path[cur_dir]:
+                            cur_dir += 1
+
+                            table_no = (inode_no - 1) / sb_values["inodes_per_group"]
+                            real_inode_no = (inode_no - 1) % sb_values["inodes_per_group"]
+                            table_offset = table_no * 32 + 8
+
+                            raw_image.seek(block_group_descriptor_table + table_offset)
+                            table_entry = hexConverter(binascii.b2a_hex(raw_image.read(4)))
+
+                            dir_inode = table_entry * sb_values["block_size"] + INODE_SIZE * real_inode_no
+                            raw_image.seek(dir_inode + inode_offsets["inode_first_data_block"])
+
+                            first_data_block = hexConverter(binascii.b2a_hex(raw_image.read(4)))
+                            raw_image.seek(first_data_block * sb_values["block_size"])
+                    hide_inodes(device, backup_file, dir_inode)
+                    print "Operation successful."
+    else:
+        print "Wrong command. Exiting..."
+        quit()
