@@ -146,6 +146,11 @@ if __name__ == "__main__":
                         inode_name = binascii.b2a_qp(raw_image.read(name_length))
                         padding = raw_image.read(record_length - name_length - 8)
 
+                        """
+                        print inode_name,
+                        raw_input()
+                        """
+
                         if inode_name == full_path[cur_dir]:
                             cur_dir += 1
 
